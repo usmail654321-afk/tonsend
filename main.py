@@ -1,6 +1,7 @@
 import asyncio
 import requests
 import base64
+import time
 from tonsdk.contract.wallet import Wallets
 from tonsdk.utils import to_nano
 
@@ -11,28 +12,38 @@ async def main():
     amount = 0.03
     memo = "115493"
     
-    # API configuration
-    API_BASE = "https://toncenter.com"
+    # 2. API configuration with Headers to bypass simple blocks
+    API_BASE = "https://toncenter.com/api/v2"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
     
-    # 2. Setup Wallet (Fixed function name: from_mnemonics)
+    # 3. Setup Wallet
     mnemonics_list = mnemonic.split()
-    # Changed from_mnemonic to from_mnemonics
     _m, _pub, _priv, wallet = Wallets.from_mnemonics(mnemonics_list, version='v4r2', workchain=0)
     wallet_address = wallet.address.to_string(True, True, False)
     
     print(f"Checking wallet: {wallet_address}")
 
-    # 3. Get Sequence Number (seqno) from API
+    # 4. Get Sequence Number (seqno) with error handling
+    seqno = 0
     try:
-        res = requests.get(f"{API_BASE}/getAddressInformation?address={wallet_address}").json()
-        # If wallet is not initialized, seqno won't be in the response
-        seqno = res.get('result', {}).get('seqno', 0)
+        # Added headers to the request
+        response = requests.get(f"{API_BASE}/getAddressInformation?address={wallet_address}", headers=headers)
+        
+        if response.status_code != 200:
+            print(f"API Error: Status {response.status_code}. The API might be blocking the request.")
+            return
+
+        data = response.json()
+        seqno = data.get('result', {}).get('seqno', 0)
         if seqno is None: seqno = 0
+        print(f"Current seqno: {seqno}")
     except Exception as e:
-        print(f"Error fetching seqno: {e}")
+        print(f"Could not parse JSON. The server sent: {response.text[:100]}")
         return
 
-    # 4. Create Transfer
+    # 5. Create Transfer
     query = wallet.create_transfer_message(
         to_addr=recipient,
         amount=to_nano(amount, 'ton'),
@@ -40,11 +51,14 @@ async def main():
         payload=memo
     )
 
-    # 5. Broadcast to Network
+    # 6. Broadcast to Network
     boc = base64.b64encode(query['boc'].to_boc(False)).decode()
-    
     payload = {"boc": boc}
-    response = requests.post(f"{API_BASE}/sendBoc", json=payload)
+    
+    # Small delay before sending
+    time.sleep(1)
+    
+    response = requests.post(f"{API_BASE}/sendBoc", json=payload, headers=headers)
     
     if response.status_code == 200:
         print(f"Successfully sent! Response: {response.json()}")
