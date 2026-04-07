@@ -16,22 +16,22 @@ async def main():
 
     client = None
     try:
-        # 1. Initialize and connect the LiteClient
-        client = LiteClient.from_mainnet_config(ls_i=0, trust_level=2)
+        # FIX: Try a different LiteServer index (ls_i=1) and lower trust_level
+        # Some servers at index 0 might be out of sync
+        print("🔗 Connecting to LiteServer...")
+        client = LiteClient.from_mainnet_config(ls_i=1, trust_level=1)
         await client.connect()
         print("✅ Connected to TON network")
 
-        # 2. Load Wallet (Use 'provider' instead of 'client')
+        # Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
 
-        # 3. Convert TON to nanoTON
+        # Transfer
         amount_nano = int(AMOUNT * 1_000_000_000)
-
-        # 4. Transfer
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
-        # Since 'provider' was passed above, we don't need 'client' here
+        
         tx_hash = await wallet.transfer(
             destination=RECIPIENT, 
             amount=amount_nano, 
@@ -40,6 +40,7 @@ async def main():
         print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
 
     except Exception as e:
+        # If ls_i=1 also fails, you can try ls_i=2 in the logs
         print(f"❌ ERROR: {e}")
 
     finally:
@@ -49,4 +50,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
