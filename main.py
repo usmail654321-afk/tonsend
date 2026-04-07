@@ -1,6 +1,6 @@
 import os
 import asyncio
-import httpx  # Using httpx for reliable async fetching
+import requests
 from pytoniq import LiteClient, WalletV4R2
 
 # 💰 Settings
@@ -15,22 +15,21 @@ async def main():
         print("❌ MNEMONIC not set in Railway variables")
         return
 
-    # 1. Fetch fresh config manually via httpx
-    # This avoids the "list index out of range" error from the SDK's internal fetcher
+    # 1. Fetch fresh config manually via requests
+    # Using 'requests' as specified in your requirements.txt
     try:
-        async with httpx.AsyncClient() as http:
-            resp = await http.get('https://ton.org')
-            config = resp.json()
+        config = requests.get('https://ton.org').json()
     except Exception as e:
         print(f"❌ Failed to fetch TON config: {e}")
         return
 
     client = None
-    # 2. Try each server in the config until one works
+    # 2. Iterate through servers to find a working one
     for i in range(len(config['liteservers'])):
         try:
             print(f"🔗 Trying LiteServer #{i}...")
-            client = LiteClient.from_config(config, ls_i=i, trust_level=1)
+            # In 0.1.9, use from_config with the full config dict
+            client = LiteClient.from_config(config=config, ls_i=i, trust_level=1)
             await client.connect()
             print(f"✅ Connected to server #{i}")
             break 
@@ -44,7 +43,7 @@ async def main():
         return
 
     try:
-        # 3. Load Wallet
+        # 3. Load Wallet (In 0.1.9, use 'provider')
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
@@ -53,6 +52,7 @@ async def main():
         amount_nano = int(AMOUNT * 1_000_000_000)
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
         
+        # Note: wallet.transfer in 0.1.9 uses the provider established above
         tx_hash = await wallet.transfer(
             destination=RECIPIENT, 
             amount=amount_nano, 
