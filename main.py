@@ -8,13 +8,11 @@ RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
 AMOUNT = 0.02  # TON
 SEED_PHRASE = os.getenv("MNEMONIC")
 
-# Public Mainnet LiteServer
+# Public Mainnet LiteServer (base64 server_pub_key)
 LITE_SERVER = {
     "host": "main.ton.dev",
     "port": 443,
-    "server_pub_key": bytes.fromhex(
-        "a5c2c34b5b8b2f7c5e53d6d3b18fae6827b4313d38a0bb1f2f1f3e0b6d2c4a8f"
-    ),
+    "server_pub_key": b"oXCzS1uLL3xeU9bTsh+uYgnbQxNOK7B8/F4L0sWShOw=",
 }
 
 async def main():
