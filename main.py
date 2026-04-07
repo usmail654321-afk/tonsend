@@ -1,6 +1,7 @@
 import os
 import asyncio
-from pytoniq import LiteBalancer, WalletV4R2
+import requests
+from pytoniq import LiteClient, WalletV4R2
 
 # 💰 Settings
 RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
@@ -14,21 +15,38 @@ async def main():
         print("❌ MNEMONIC not set in Railway variables")
         return
 
-    # 1. Use LiteBalancer instead of LiteClient
-    # It automatically manages servers and retries for you
-    client = LiteBalancer.from_mainnet_config(trust_level=1)
-    
+    # 1. Fetch fresh config manually to ensure we have working servers
     try:
-        print("🔗 Connecting and syncing via Balancer...")
-        await client.start_up()
-        print("✅ Connected to TON network")
+        config = requests.get('https://ton.org').json()
+    except Exception as e:
+        print(f"❌ Failed to fetch TON config: {e}")
+        return
 
-        # 2. Load Wallet
+    client = None
+    # 2. Try servers until one works (avoids 651 and index errors)
+    for i in range(len(config['liteservers'])):
+        try:
+            print(f"🔗 Trying LiteServer #{i}...")
+            client = LiteClient.from_config(config, ls_i=i, trust_level=1)
+            await client.connect()
+            print(f"✅ Connected to server #{i}")
+            break 
+        except Exception as e:
+            print(f"⚠️ Server #{i} failed: {e}")
+            if client: await client.close()
+            client = None
+
+    if not client:
+        print("❌ Could not connect to any TON LiteServers.")
+        return
+
+    try:
+        # 3. Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
 
-        # 3. Convert and Transfer
+        # 4. Transfer
         amount_nano = int(AMOUNT * 1_000_000_000)
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
         
@@ -40,13 +58,12 @@ async def main():
         print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
 
     except Exception as e:
-        print(f"❌ ERROR: {e}")
+        print(f"❌ ERROR during transfer: {e}")
 
     finally:
-        # 4. LiteBalancer also uses close()
-        await client.close()
-        print("✅ Client closed")
+        if client:
+            await client.close()
+            print("✅ Client closed")
 
 if __name__ == "__main__":
     asyncio.run(main())
-
