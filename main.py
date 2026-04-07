@@ -5,51 +5,51 @@ import requests
 from pytoniq import LiteClient
 from pytoniq.contract.wallets import WalletV4R2
 
-# Railway Variables থেকে mnemonic নাও
+# 🌐 Recipient and Amount
+RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
+AMOUNT = 0.02  # TON
+
+# 🔐 Get mnemonic from Railway Variables
 SEED_PHRASE = os.getenv("MNEMONIC")
-
-# পাঠানোর address
-RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"  # নিজের address বসাও
-
-# Amount in TON
-AMOUNT = 0.03
 
 
 async def main():
+    print("🚀 Starting TON transfer bot...")
+
     if not SEED_PHRASE:
-        print("❌ Error: MNEMONIC not set")
+        print("❌ MNEMONIC variable is not set in Railway")
         return
 
     try:
-        # TON config load
+        # TON network config
         config_url = "https://ton.org/global-config.json"
         config = requests.get(config_url).json()
+        print("✅ Loaded TON config")
 
         # Connect LiteClient
         client = LiteClient.from_mainnet_config(config)
         await client.connect()
+        print("✅ Connected to TON network")
 
-        # Load wallet from mnemonic
+        # Load wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(
             client=client,
             mnemonics=mnemonics
         )
+        print(f"✅ Wallet loaded: {wallet.address}")
 
-        print(f"✅ Wallet: {wallet.address}")
-
-        # TON -> nanoTON
+        # Convert to nanoTON
         amount_nano = int(AMOUNT * 1_000_000_000)
 
-        print(f"🚀 Sending {AMOUNT} TON to {RECIPIENT}...")
-
+        print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
         tx_hash = await wallet.transfer(
             destination=RECIPIENT,
             amount=amount_nano,
             comment="Railway Auto Transfer"
         )
 
-        print(f"🎉 SUCCESS! TX HASH: {tx_hash}")
+        print(f"🎉 Transfer SUCCESS! TX Hash: {tx_hash}")
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
@@ -57,6 +57,7 @@ async def main():
     finally:
         try:
             await client.close()
+            print("✅ Client closed")
         except:
             pass
 
