@@ -5,11 +5,11 @@ import requests
 from pytoniq import LiteClient
 from pytoniq.contract.wallets import WalletV4R2
 
-# 🌐 Recipient and Amount
+# TON Transfer Settings
 RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
 AMOUNT = 0.02  # TON
 
-# 🔐 Get mnemonic from Railway Variables
+# Load mnemonic from Railway variables
 SEED_PHRASE = os.getenv("MNEMONIC")
 
 
@@ -17,11 +17,11 @@ async def main():
     print("🚀 Starting TON transfer bot...")
 
     if not SEED_PHRASE:
-        print("❌ MNEMONIC variable is not set in Railway")
+        print("❌ MNEMONIC variable not set in Railway")
         return
 
     try:
-        # TON network config
+        # Load TON config
         config_url = "https://ton.org/global-config.json"
         config = requests.get(config_url).json()
         print("✅ Loaded TON config")
@@ -31,7 +31,7 @@ async def main():
         await client.connect()
         print("✅ Connected to TON network")
 
-        # Load wallet
+        # Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(
             client=client,
@@ -43,13 +43,14 @@ async def main():
         amount_nano = int(AMOUNT * 1_000_000_000)
 
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
+
         tx_hash = await wallet.transfer(
             destination=RECIPIENT,
             amount=amount_nano,
             comment="Railway Auto Transfer"
         )
 
-        print(f"🎉 Transfer SUCCESS! TX Hash: {tx_hash}")
+        print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
