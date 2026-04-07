@@ -1,7 +1,6 @@
 import asyncio
 import requests
 import base64
-import time
 from tonsdk.contract.wallet import Wallets
 from tonsdk.utils import to_nano
 
@@ -12,30 +11,30 @@ async def main():
     amount = 0.03
     memo = "115493"
     
-    API_BASE = "https://toncenter.com"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    # Using Tonapi.io (More reliable for cloud services)
+    API_BASE = "https://tonapi.io"
     
-    # 2. Setup Wallet (Using v4r2 to match your UQ... address)
+    # 2. Setup Wallet
     mnemonics_list = mnemonic.split()
     _m, _pub, _priv, wallet = Wallets.from_mnemonics(mnemonics_list, version='v4r2', workchain=0)
     wallet_address = wallet.address.to_string(True, True, False)
-    
     print(f"Checking wallet: {wallet_address}")
 
-    # 3. Get Sequence Number (seqno)
+    # 3. Get Sequence Number (seqno) from Tonapi
     seqno = 0
     try:
-        response = requests.get(f"{API_BASE}/getAddressInformation?address={wallet_address}", headers=headers)
+        response = requests.get(f"{API_BASE}/blockchain/accounts/{wallet_address}/methods/seqno")
         if response.status_code == 200:
             data = response.json()
-            seqno = data.get('result', {}).get('seqno', 0)
-            if seqno is None: seqno = 0
+            # Tonapi returns { "success": true, "decoded": { "stack": [...] } }
+            stack = data.get('decoded', {}).get('stack', [])
+            if stack:
+                seqno = int(stack[0].get('num', 0), 16) if '0x' in str(stack[0].get('num')) else int(stack[0].get('num', 0))
         print(f"Current seqno: {seqno}")
     except Exception as e:
-        print(f"Seqno fetch failed, trying with 0. Error: {e}")
+        print(f"Seqno fetch failed, using 0. Error: {e}")
 
-    # 4. Create Transfer (Fixed the 'boc' access)
-    # The library returns an object, so we call .to_boc() on it directly
+    # 4. Create Transfer
     query = wallet.create_transfer_message(
         to_addr=recipient,
         amount=to_nano(amount, 'ton'),
@@ -43,16 +42,16 @@ async def main():
         payload=memo
     )
 
-    # 5. Broadcast to Network
-    # Accessing 'message' instead of 'boc' and converting to base64
+    # 5. Broadcast to Network via Tonapi
     boc_bytes = query['message'].to_boc(False)
     boc_base64 = base64.b64encode(boc_bytes).decode()
     
     payload = {"boc": boc_base64}
-    response = requests.post(f"{API_BASE}/sendBoc", json=payload, headers=headers)
+    # Tonapi uses /v2/blockchain/message
+    response = requests.post(f"{API_BASE}/blockchain/message", json=payload)
     
     if response.status_code == 200:
-        print(f"Successfully sent! Response: {response.json()}")
+        print(f"Successfully sent! Transaction accepted by Tonapi.")
     else:
         print(f"Failed to send. Status: {response.status_code}, Error: {response.text}")
 
