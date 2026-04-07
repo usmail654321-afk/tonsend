@@ -1,5 +1,6 @@
 import os
 import asyncio
+
 from pytoniq import LiteClient
 from pytoniq.contract.wallets import WalletV4R2
 
@@ -8,11 +9,6 @@ RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
 AMOUNT = 0.02  # TON
 SEED_PHRASE = os.getenv("MNEMONIC")
 
-# ✅ Hardcoded Mainnet Lite Servers
-LITE_SERVERS = [
-    {"host": "net.ton.dev", "port": 443, "id": None},  # Example
-    {"host": "main.ton.dev", "port": 443, "id": None},
-]
 
 async def main():
     print("🚀 Starting TON bot...")
@@ -22,17 +18,17 @@ async def main():
         return
 
     try:
-        # Connect LiteClient
-        client = LiteClient(servers=LITE_SERVERS)
+        # ✅ Connect to Mainnet LiteClient
+        client = LiteClient.from_mainnet()
         await client.connect()
-        print("✅ Connected to TON network")
+        print("✅ Connected to TON Mainnet")
 
         # Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(client=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
 
-        # Convert to nanoTON
+        # Convert TON -> nanoTON
         amount_nano = int(AMOUNT * 1_000_000_000)
 
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
@@ -48,6 +44,7 @@ async def main():
             print("✅ Client closed")
         except:
             pass
+
 
 if __name__ == "__main__":
     asyncio.run(main())
