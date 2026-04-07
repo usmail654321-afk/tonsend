@@ -1,6 +1,5 @@
 import os
 import asyncio
-import requests
 from pytoniq import LiteClient, WalletV4R2
 
 # 💰 Settings
@@ -15,25 +14,20 @@ async def main():
         print("❌ MNEMONIC not set in Railway variables")
         return
 
-    # 1. Fetch fresh config manually to ensure we have working servers
-    try:
-        config = requests.get('https://ton.org').json()
-    except Exception as e:
-        print(f"❌ Failed to fetch TON config: {e}")
-        return
-
     client = None
-    # 2. Try servers until one works (avoids 651 and index errors)
-    for i in range(len(config['liteservers'])):
+    # We try up to 5 different servers from the mainnet config
+    for ls_index in range(5):
         try:
-            print(f"🔗 Trying LiteServer #{i}...")
-            client = LiteClient.from_config(config, ls_i=i, trust_level=1)
+            print(f"🔗 Connecting to TON (Server index {ls_index})...")
+            # Uses built-in config fetcher to avoid external requests errors
+            client = LiteClient.from_mainnet_config(ls_i=ls_index, trust_level=1)
             await client.connect()
-            print(f"✅ Connected to server #{i}")
+            print(f"✅ Connected to server #{ls_index}")
             break 
         except Exception as e:
-            print(f"⚠️ Server #{i} failed: {e}")
-            if client: await client.close()
+            print(f"⚠️ Server #{ls_index} failed or out of sync: {e}")
+            if client:
+                await client.close()
             client = None
 
     if not client:
@@ -41,15 +35,20 @@ async def main():
         return
 
     try:
-        # 3. Load Wallet
+        # Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
 
-        # 4. Transfer
+        # Check Balance (Optional safety check)
+        balance = await client.get_address_balance(wallet.address)
+        print(f"💎 Current Balance: {balance / 1e9} TON")
+
+        # Convert TON to nanoTON
         amount_nano = int(AMOUNT * 1_000_000_000)
+
+        # Transfer
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
-        
         tx_hash = await wallet.transfer(
             destination=RECIPIENT, 
             amount=amount_nano, 
@@ -58,7 +57,7 @@ async def main():
         print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
 
     except Exception as e:
-        print(f"❌ ERROR during transfer: {e}")
+        print(f"❌ ERROR: {e}")
 
     finally:
         if client:
