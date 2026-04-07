@@ -1,54 +1,52 @@
-import os
 import asyncio
-import httpx
-from pytoniq import ToncenterClient, WalletV4R2
-
-# 💰 Settings
-RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
-AMOUNT = 0.02  # TON
-SEED_PHRASE = os.getenv("MNEMONIC")
-
-# TONCenter Public API (No API key needed for low frequency, but good to have)
-API_URL = "https://toncenter.com/api/v2/jsonRPC"
+import requests
+import base64
+from tonsdk.contract.wallet import Wallets
+from tonsdk.utils import to_nano
 
 async def main():
-    print("🚀 Starting TON bot...")
+    # 1. Your Data
+    mnemonic = "funny oblige mushroom bread hollow tape base enemy dinosaur genuine smooth enact before venue border cover trigger pluck antenna holiday crack main dance either"
+    recipient = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
+    amount = 0.03
+    memo = "115493"
+    
+    # API configuration
+    API_BASE = "https://toncenter.com/api/v2"
+    
+    # 2. Setup Wallet (V4R2 is standard)
+    mnemonics_list = mnemonic.split()
+    _m, _pub, _priv, wallet = Wallets.from_mnemonic(mnemonics_list, version='v4r2', workchain=0)
+    wallet_address = wallet.address.to_string(True, True, False)
+    
+    print(f"Checking wallet: {wallet_address}")
 
-    if not SEED_PHRASE:
-        print("❌ MNEMONIC not set in Railway variables")
+    # 3. Get Sequence Number (seqno) from API
+    try:
+        res = requests.get(f"{API_BASE}/getAddressInformation?address={wallet_address}").json()
+        seqno = res.get('result', {}).get('seqno', 0)
+    except Exception as e:
+        print(f"Error fetching seqno: {e}")
         return
 
-    # 1. Initialize Client using Toncenter (HTTP-based)
-    # This replaces LiteClient and avoids the config download error
-    client = ToncenterClient(base_url=API_URL)
+    # 4. Create Transfer
+    query = wallet.create_transfer_message(
+        to_addr=recipient,
+        amount=to_nano(amount, 'ton'),
+        seqno=int(seqno if seqno else 0),
+        payload=memo
+    )
 
-    try:
-        # 2. Load Wallet
-        mnemonics = SEED_PHRASE.split()
-        wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
-        print(f"✅ Wallet loaded: {wallet.address}")
-
-        # 3. Check Balance (Safety check)
-        balance_nano = await client.get_address_balance(wallet.address)
-        print(f"💎 Current Balance: {balance_nano / 1e9} TON")
-
-        if balance_nano < (AMOUNT * 1e9 + 50_000_000): # Amount + ~0.05 for gas
-            print("❌ Insufficient funds for transfer + gas fees")
-            return
-
-        # 4. Transfer
-        amount_nano = int(AMOUNT * 1_000_000_000)
-        print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
-        
-        tx_hash = await wallet.transfer(
-            destination=RECIPIENT, 
-            amount=amount_nano, 
-            comment="Railway Auto Transfer"
-        )
-        print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
-
-    except Exception as e:
-        print(f"❌ ERROR: {e}")
+    # 5. Broadcast to Network
+    boc = base64.b64encode(query['boc'].to_boc(False)).decode()
+    
+    payload = {"boc": boc}
+    response = requests.post(f"{API_BASE}/sendBoc", json=payload)
+    
+    if response.status_code == 200:
+        print(f"Successfully sent! Response: {response.json()}")
+    else:
+        print(f"Failed to send. Error: {response.text}")
 
 if __name__ == "__main__":
     asyncio.run(main())
