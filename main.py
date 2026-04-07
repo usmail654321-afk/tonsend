@@ -1,19 +1,12 @@
 import os
 import asyncio
-from pytoniq import LiteClient
-from pytoniq.contract.wallets import WalletV4R2
+import httpx  # Using httpx for reliable async fetching
+from pytoniq import LiteClient, WalletV4R2
 
-# Settings
+# 💰 Settings
 RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
 AMOUNT = 0.02  # TON
 SEED_PHRASE = os.getenv("MNEMONIC")
-
-# Public Mainnet LiteServer (base64 server_pub_key)
-LITE_SERVER = {
-    "host": "main.ton.dev",
-    "port": 443,
-    "server_pub_key": b"oXCzS1uLL3xeU9bTsh+uYgnbQxNOK7B8/F4L0sWShOw=",
-}
 
 async def main():
     print("🚀 Starting TON bot...")
@@ -22,33 +15,47 @@ async def main():
         print("❌ MNEMONIC not set in Railway variables")
         return
 
-    client = None
+    # 1. Fetch fresh config manually via httpx
+    # This avoids the "list index out of range" error from the SDK's internal fetcher
     try:
-        # Connect LiteClient
-        print(f"🔗 Connecting to TON server {LITE_SERVER['host']}:{LITE_SERVER['port']}...")
-        client = LiteClient(
-            host=LITE_SERVER["host"],
-            port=LITE_SERVER["port"],
-            server_pub_key=LITE_SERVER["server_pub_key"]
-        )
-        await client.connect()
-        print("✅ Connected to TON network")
+        async with httpx.AsyncClient() as http:
+            resp = await http.get('https://ton.org')
+            config = resp.json()
+    except Exception as e:
+        print(f"❌ Failed to fetch TON config: {e}")
+        return
 
-        # Load Wallet
+    client = None
+    # 2. Try each server in the config until one works
+    for i in range(len(config['liteservers'])):
+        try:
+            print(f"🔗 Trying LiteServer #{i}...")
+            client = LiteClient.from_config(config, ls_i=i, trust_level=1)
+            await client.connect()
+            print(f"✅ Connected to server #{i}")
+            break 
+        except Exception as e:
+            print(f"⚠️ Server #{i} failed: {e}")
+            if client: await client.close()
+            client = None
+
+    if not client:
+        print("❌ Could not connect to any TON LiteServers.")
+        return
+
+    try:
+        # 3. Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
 
-        # Balance check
-        balance = await client.get_address_balance(wallet.address)
-        print(f"💎 Current Balance: {balance / 1e9} TON")
-
-        # Transfer
+        # 4. Transfer
         amount_nano = int(AMOUNT * 1_000_000_000)
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
+        
         tx_hash = await wallet.transfer(
-            destination=RECIPIENT,
-            amount=amount_nano,
+            destination=RECIPIENT, 
+            amount=amount_nano, 
             comment="Railway Auto Transfer"
         )
         print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
