@@ -1,2 +1,2 @@
-pytoniq
+tonutils-py
 requests
