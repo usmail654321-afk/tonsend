@@ -12,11 +12,12 @@ async def main():
     memo = "115493"
     
     # API configuration
-    API_BASE = "https://toncenter.com/api/v2"
+    API_BASE = "https://toncenter.com"
     
-    # 2. Setup Wallet (V4R2 is standard)
+    # 2. Setup Wallet (Fixed function name: from_mnemonics)
     mnemonics_list = mnemonic.split()
-    _m, _pub, _priv, wallet = Wallets.from_mnemonic(mnemonics_list, version='v4r2', workchain=0)
+    # Changed from_mnemonic to from_mnemonics
+    _m, _pub, _priv, wallet = Wallets.from_mnemonics(mnemonics_list, version='v4r2', workchain=0)
     wallet_address = wallet.address.to_string(True, True, False)
     
     print(f"Checking wallet: {wallet_address}")
@@ -24,7 +25,9 @@ async def main():
     # 3. Get Sequence Number (seqno) from API
     try:
         res = requests.get(f"{API_BASE}/getAddressInformation?address={wallet_address}").json()
+        # If wallet is not initialized, seqno won't be in the response
         seqno = res.get('result', {}).get('seqno', 0)
+        if seqno is None: seqno = 0
     except Exception as e:
         print(f"Error fetching seqno: {e}")
         return
@@ -33,7 +36,7 @@ async def main():
     query = wallet.create_transfer_message(
         to_addr=recipient,
         amount=to_nano(amount, 'ton'),
-        seqno=int(seqno if seqno else 0),
+        seqno=int(seqno),
         payload=memo
     )
 
@@ -46,7 +49,7 @@ async def main():
     if response.status_code == 200:
         print(f"Successfully sent! Response: {response.json()}")
     else:
-        print(f"Failed to send. Error: {response.text}")
+        print(f"Failed to send. Status: {response.status_code}, Error: {response.text}")
 
 if __name__ == "__main__":
     asyncio.run(main())
