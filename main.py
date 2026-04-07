@@ -2,63 +2,67 @@ import os
 import asyncio
 import requests
 
-from tonutils.client import TonClient
-from tonutils.wallet import WalletV4R2
+from pytoniq import LiteClient
+from pytoniq.contract.wallets import WalletV4R2
 
 
-# 🔐 নিরাপদভাবে Railway Variables থেকে mnemonic নাও
+# 🔐 Railway Variables থেকে mnemonic নাও
 SEED_PHRASE = os.getenv("MNEMONIC")
 
-# 🎯 যেখানে পাঠাবে
-RECIPIENT = "UQB3jmbybhCXQqyKHShHp5R_6Za8Wbdo4MHShl2Ky-xZwRL6"  # এখানে নিজের address দাও
+# 🎯 Receiver Address
+RECIPIENT = "UQB3jmbybhCXQqyKHShHp5R_6Za8Wbdo4MHShl2Ky-xZwRL6"   # নিজের address বসাও
 
-# 💰 কত TON পাঠাবে
+# 💰 Amount in TON
 AMOUNT = 0.02
 
 
 async def main():
     if not SEED_PHRASE:
-        print("❌ Error: MNEMONIC environment variable is not set.")
+        print("❌ Error: MNEMONIC not set in Railway Variables")
         return
 
-    # 🌐 TON config load
-    config_url = "https://ton.org/global-config.json"
-    config = requests.get(config_url).json()
-
-    # 🔌 Client create
-    client = TonClient(config=config)
-
     try:
-        # 🔗 Connect to network
+        # 🌐 TON config load
+        config_url = "https://ton.org/global-config.json"
+        config = requests.get(config_url).json()
+
+        # 🔌 Connect LiteClient
+        client = LiteClient.from_mainnet_config(config)
         await client.connect()
 
-        # 🔑 mnemonic split
-        mnemonic_list = SEED_PHRASE.split()
+        # 🔑 mnemonic list
+        mnemonics = SEED_PHRASE.split()
 
-        # 💼 Wallet তৈরি
-        wallet = WalletV4R2.from_mnemonic(
+        # 💼 Wallet load
+        wallet = await WalletV4R2.from_mnemonic(
             client=client,
-            mnemonics=mnemonic_list
+            mnemonics=mnemonics
         )
 
-        print(f"✅ Connected Wallet: {wallet.address}")
+        print(f"✅ Wallet Connected: {wallet.address}")
 
-        # 🚀 Transfer start
+        # 💸 TON → nanoTON convert (VERY IMPORTANT)
+        amount_nano = int(AMOUNT * 1_000_000_000)
+
         print(f"🚀 Sending {AMOUNT} TON to {RECIPIENT}...")
 
+        # 📤 Send transaction
         tx_hash = await wallet.transfer(
             destination=RECIPIENT,
-            amount=AMOUNT,
+            amount=amount_nano,
             comment="Railway Auto Transfer"
         )
 
-        print(f"🎉 Success! TX Hash: {tx_hash}")
+        print(f"🎉 SUCCESS! TX HASH: {tx_hash}")
 
     except Exception as e:
-        print(f"❌ Error during transfer: {e}")
+        print(f"❌ ERROR: {e}")
 
     finally:
-        await client.close()
+        try:
+            await client.close()
+        except:
+            pass
 
 
 if __name__ == "__main__":
