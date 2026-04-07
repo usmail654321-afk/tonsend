@@ -1,14 +1,18 @@
 import os
 import asyncio
-import requests
-
 from pytoniq import LiteClient
 from pytoniq.contract.wallets import WalletV4R2
 
+# 💰 Settings
 RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
 AMOUNT = 0.02  # TON
 SEED_PHRASE = os.getenv("MNEMONIC")
 
+# ✅ Hardcoded Mainnet Lite Servers
+LITE_SERVERS = [
+    {"host": "net.ton.dev", "port": 443, "id": None},  # Example
+    {"host": "main.ton.dev", "port": 443, "id": None},
+]
 
 async def main():
     print("🚀 Starting TON bot...")
@@ -18,16 +22,8 @@ async def main():
         return
 
     try:
-        # ⚡ Load LiteServer config from mainnet
-        config_url = "https://ton.org/global-config.json"
-        global_config = requests.get(config_url).json()
-        lite_servers = global_config.get("lite_servers", [])
-        if not lite_servers:
-            raise ValueError("Lite servers not found in global config")
-        print(f"✅ Loaded {len(lite_servers)} lite servers")
-
         # Connect LiteClient
-        client = LiteClient(servers=lite_servers)
+        client = LiteClient(servers=LITE_SERVERS)
         await client.connect()
         print("✅ Connected to TON network")
 
@@ -52,7 +48,6 @@ async def main():
             print("✅ Client closed")
         except:
             pass
-
 
 if __name__ == "__main__":
     asyncio.run(main())
