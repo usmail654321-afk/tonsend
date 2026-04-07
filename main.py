@@ -1,12 +1,15 @@
 import os
 import asyncio
-import requests
-from pytoniq import LiteClient, WalletV4R2
+import httpx
+from pytoniq import ToncenterClient, WalletV4R2
 
 # 💰 Settings
 RECIPIENT = "UQB5hKk2ZjEEjN1d7SQJxMGr-CGcmT0moFlVlr1BDGC7iS8d"
 AMOUNT = 0.02  # TON
 SEED_PHRASE = os.getenv("MNEMONIC")
+
+# TONCenter Public API (No API key needed for low frequency, but good to have)
+API_URL = "https://toncenter.com/api/v2/jsonRPC"
 
 async def main():
     print("🚀 Starting TON bot...")
@@ -15,61 +18,37 @@ async def main():
         print("❌ MNEMONIC not set in Railway variables")
         return
 
-    # 1. Fetch the correct JSON config file
-    try:
-        # Using the official global config URL
-        response = requests.get('https://ton.org', timeout=10)
-        config = response.json()
-    except Exception as e:
-        print(f"❌ Failed to fetch TON config: {e}")
-        return
-
-    client = None
-    # 2. Try servers until one connects successfully
-    for i in range(len(config['liteservers'])):
-        try:
-            print(f"🔗 Trying LiteServer #{i}...")
-            client = LiteClient.from_config(config=config, ls_i=i, trust_level=1)
-            await client.connect()
-            print(f"✅ Connected to server #{i}")
-            break 
-        except Exception as e:
-            print(f"⚠️ Server #{i} failed: {e}")
-            if client:
-                await client.close()
-            client = None
-
-    if not client:
-        print("❌ Could not connect to any TON LiteServers.")
-        return
+    # 1. Initialize Client using Toncenter (HTTP-based)
+    # This replaces LiteClient and avoids the config download error
+    client = ToncenterClient(base_url=API_URL)
 
     try:
-        # 3. Load Wallet
+        # 2. Load Wallet
         mnemonics = SEED_PHRASE.split()
         wallet = await WalletV4R2.from_mnemonic(provider=client, mnemonics=mnemonics)
         print(f"✅ Wallet loaded: {wallet.address}")
 
-        # 4. Convert and Transfer
+        # 3. Check Balance (Safety check)
+        balance_nano = await client.get_address_balance(wallet.address)
+        print(f"💎 Current Balance: {balance_nano / 1e9} TON")
+
+        if balance_nano < (AMOUNT * 1e9 + 50_000_000): # Amount + ~0.05 for gas
+            print("❌ Insufficient funds for transfer + gas fees")
+            return
+
+        # 4. Transfer
         amount_nano = int(AMOUNT * 1_000_000_000)
         print(f"💸 Sending {AMOUNT} TON to {RECIPIENT}...")
         
-        # In 0.1.9, transfer uses the provider linked during initialization
         tx_hash = await wallet.transfer(
             destination=RECIPIENT, 
             amount=amount_nano, 
             comment="Railway Auto Transfer"
         )
-        
-        # Some versions return a list/dict, some return a string hash
         print(f"🎉 Transfer SUCCESS! TX HASH: {tx_hash}")
 
     except Exception as e:
         print(f"❌ ERROR: {e}")
-
-    finally:
-        if client:
-            await client.close()
-            print("✅ Client closed")
 
 if __name__ == "__main__":
     asyncio.run(main())
