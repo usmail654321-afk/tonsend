@@ -1,2 +1,2 @@
-tonutils-py
+pytoniq==0.1.9
 requests
