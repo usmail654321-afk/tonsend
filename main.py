@@ -12,38 +12,30 @@ async def main():
     amount = 0.03
     memo = "115493"
     
-    # 2. API configuration with Headers to bypass simple blocks
-    API_BASE = "https://toncenter.com/api/v2"
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    API_BASE = "https://toncenter.com"
+    headers = {'User-Agent': 'Mozilla/5.0'}
     
-    # 3. Setup Wallet
+    # 2. Setup Wallet (Using v4r2 to match your UQ... address)
     mnemonics_list = mnemonic.split()
     _m, _pub, _priv, wallet = Wallets.from_mnemonics(mnemonics_list, version='v4r2', workchain=0)
     wallet_address = wallet.address.to_string(True, True, False)
     
     print(f"Checking wallet: {wallet_address}")
 
-    # 4. Get Sequence Number (seqno) with error handling
+    # 3. Get Sequence Number (seqno)
     seqno = 0
     try:
-        # Added headers to the request
         response = requests.get(f"{API_BASE}/getAddressInformation?address={wallet_address}", headers=headers)
-        
-        if response.status_code != 200:
-            print(f"API Error: Status {response.status_code}. The API might be blocking the request.")
-            return
-
-        data = response.json()
-        seqno = data.get('result', {}).get('seqno', 0)
-        if seqno is None: seqno = 0
+        if response.status_code == 200:
+            data = response.json()
+            seqno = data.get('result', {}).get('seqno', 0)
+            if seqno is None: seqno = 0
         print(f"Current seqno: {seqno}")
     except Exception as e:
-        print(f"Could not parse JSON. The server sent: {response.text[:100]}")
-        return
+        print(f"Seqno fetch failed, trying with 0. Error: {e}")
 
-    # 5. Create Transfer
+    # 4. Create Transfer (Fixed the 'boc' access)
+    # The library returns an object, so we call .to_boc() on it directly
     query = wallet.create_transfer_message(
         to_addr=recipient,
         amount=to_nano(amount, 'ton'),
@@ -51,13 +43,12 @@ async def main():
         payload=memo
     )
 
-    # 6. Broadcast to Network
-    boc = base64.b64encode(query['boc'].to_boc(False)).decode()
-    payload = {"boc": boc}
+    # 5. Broadcast to Network
+    # Accessing 'message' instead of 'boc' and converting to base64
+    boc_bytes = query['message'].to_boc(False)
+    boc_base64 = base64.b64encode(boc_bytes).decode()
     
-    # Small delay before sending
-    time.sleep(1)
-    
+    payload = {"boc": boc_base64}
     response = requests.post(f"{API_BASE}/sendBoc", json=payload, headers=headers)
     
     if response.status_code == 200:
